@@ -1,0 +1,218 @@
+---
+title: "Teaching Social Work Statistics with R"
+author: "Wes Furlong"
+date: "7/3/2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    code_folding: hide
+    theme: journal
+---
+
+```{r setup, include=FALSE, message=FALSE, results='hide', warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+### Call the packages we'll use for the analysis:
+tidyverse, mosaic, janitor, data.table, DataExplorer, SmartEDA, and psych.
+
+```{r results='asis', echo=FALSE, include=FALSE,}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+
+library(tidyverse)
+library(mosaic)
+library(janitor)
+library(lattice)
+library(data.table)
+library(DataExplorer)
+library(SmartEDA)
+library(psych)
+
+```
+
+### Load the dataset:
+
+```{r}
+schools <- read.csv("asheville_school_data.csv", stringsAsFactors = FALSE) 
+schools <- schools %>%
+  clean_names()
+schools <- schools %>% rename(name = i_name)
+```
+
+### Let's subset a few variables and take a look at the data:
+
+```{r}
+schools_1 <- schools %>%
+  select(name, type, stud_teach_ratio, free_dis_lunch, enrollment, district, title_1, avg_score_2018, rank_change)
+
+str(schools_1)
+describe(schools_1)
+```
+
+### Examine the categorical variables:
+```{r}
+ExpCatViz(schools_1)
+```
+
+### Examine the distribution of the numeric variables:
+```{r}
+ExpNumViz(schools_1)
+```
+
+### Examine the missing values:
+```{r}
+plot_missing(schools_1)
+```
+
+
+### Let's look at school performance by averages scores in 2018: 
+
+```{r}
+mean(avg_score_2018 ~ name, data = schools_1, na.rm= TRUE)
+```
+
+### How does title I status affect enrollment figures?  Let's look at the boxplot of enrollment by title I status. 
+
+```{r}
+bwplot(enrollment ~ title_1, data = schools_1, na.rm = TRUE)
+```
+
+
+### How do the different types of schools compare on state ranking? 
+ Let's look at rank change between 2017 and 2018 for public schools, public charter schools, and public magnet schools. We'll first filter type:
+
+```{r}
+schools_1_type <- schools_1 %>%
+  filter(type %in% c("Public", "Public, Magnet", "Public, Charter")) 
+
+favstats(rank_change ~ type, data = schools_1_type, na.rm = TRUE)
+```
+
+
+### To introduce multivariable thinking, we could use color or size to map a third (categorical) variable. For example, "How does enrollment affect the student teacher ratio by district? 
+
+```{r}
+gf_point(stud_teach_ratio ~ enrollment, data = schools_1, color = ~ district) %>%
+  gf_lm()
+```
+
+### What are the five highest performing high schools by average scores in 2018?
+
+```{r}
+schools_1 %>%
+  select(name, avg_score_2018) %>%
+  arrange(desc(avg_score_2018))
+```
+
+### Answer:
+ Evergreen Community Charter, Pisgah Elementary, Hominy Valley Elementary, School of Inquiry and Life Sciences, and Glen Arden Elementary.
+
+### Let's take a look at enrollment size and student-teacher ratio for these schools:
+
+```{r}
+top5 <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio) %>%
+  filter(name %in% c("Evergreen Community Charter", "Pisgah Elementary", "Hominy Valley Elementary", "School of Inquiry and Life Sciences", "Glen Arden Elementary"))
+data.table(top5)
+
+```
+
+### How do these same variables compare with the lowest five performing schools?
+
+```{r}
+schools_1 %>%
+  select(name, avg_score_2018) %>%
+  arrange(avg_score_2018)
+```
+
+```{r}
+bottom5 <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio) %>%
+  filter(name %in% c("Johnston Elementary", "Community High School", "Oakley Elementary", "Woodfin Elementary", "Erwin Middle"))
+data.table(bottom5)
+```
+
+### Here is another way to filter the top and bottom values. 
+ We will create a dataframe for the top and bottom 5 based on values rather than names and then bind the rows together. 
+
+```{r}
+top5_scores <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio) %>%
+  top_n(5, avg_score_2018)
+
+bottom5_scores <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio) %>%
+  top_n(-5, avg_score_2018)
+
+top_bottom_5 <- bind_rows(top5_scores, bottom5_scores)
+
+top_bottom_5 <- top_bottom_5 %>%
+  arrange(desc(avg_score_2018))
+
+data.table(top_bottom_5)
+
+
+```
+
+### Does it look like enrollment or student teacher ratio affects school performance?
+ 
+Let's visualize the data. First, we'll look at enrollment and average scores. 
+
+```{r}
+ggplot(data = top_bottom_5, aes(enrollment, avg_score_2018, label= name)) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  geom_text(angle=45, size= 3, hjust= .4, vjust= -.6) +
+  theme_bw()
+```
+
+### What about student teacher ratio?
+
+```{r}
+ggplot(data = top_bottom_5, aes(stud_teach_ratio, avg_score_2018, label= name)) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  geom_text(angle=45, size= 3, hjust= .4, vjust= -.6) +
+  theme_bw()
+```
+
+
+### What other variables do you think might affect school performance?  
+Let's take a look at the percentage of students on free or reduced lunch. 
+
+
+```{r}
+top5_scores <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio, free_dis_lunch) %>%
+  top_n(5, avg_score_2018)
+
+
+bottom5_scores <- schools_1 %>%
+  select(name, avg_score_2018, enrollment, stud_teach_ratio, free_dis_lunch) %>%
+  top_n(-5, avg_score_2018)
+
+top_bottom_5 <- bind_rows(top5_scores, bottom5_scores)
+
+top_bottom_5 <- top_bottom_5 %>%
+  arrange(desc(avg_score_2018))
+
+ggplot(data = top_bottom_5, aes(free_dis_lunch, avg_score_2018, label= name)) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  geom_text(angle=45, size= 3, hjust= .4, vjust= -.6) +
+  theme_bw()
+```
+
+
+
+
+
+
+
+
+
+
+
+
